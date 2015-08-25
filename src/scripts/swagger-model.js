@@ -244,4 +244,62 @@ angular
 			modelCache = {};
 		};
 
+    function getSchemaRef(schema) {
+      return schema.type === 'array' ? schema.items.$ref : schema.$ref;
+    }
+
+    function getParamsFromDefinitionRef(swagger, ref) {
+      var def = swagger.definitions && swagger.definitions[getDefinitionName({$ref: ref})];
+      var param = {};
+      param.required = def.required;
+      param.type = def.type;
+      param.subtype = def.type;
+      if(def.properties) {
+        param.parameters = propertiesAsParameters(swagger, def.properties, def.required);
+      }
+      return param;
+    }
+
+    function propertiesAsParameters(swagger, properties, required) {
+      var params = [];
+      for(var name in properties) {
+        if(properties.hasOwnProperty(name)) {
+          var param = properties[name];
+          param.id = name;
+          param.name = name;
+          if(required) {
+            param.required = required.length ? required.indexOf(name) !== -1 : required;
+          }
+          param.subtype = param.enum ? 'enum' : param.type;
+          var ref = getSchemaRef(param);
+          if(ref) {
+            var parameters = getParamsFromDefinitionRef(swagger, ref);
+            if(param.subtype === 'array') {
+              param.items = parameters;
+            }
+            param.parameters = parameters.parameters;
+            param.subtype = param.subtype || parameters.subtype;
+          } else if(param.properties) {
+            param.parameters = propertiesAsParameters(swagger, param.properties, param.required);
+          }
+          params.push(param);
+        }
+      }
+      return params;
+    }
+
+    this.getBodySchemaAsParameters = function(swagger, schema) {
+      var ref = getSchemaRef(schema);
+      if (ref) {
+				var def = swagger.definitions && swagger.definitions[getDefinitionName({$ref: ref})];
+				if (def) {
+          return propertiesAsParameters(swagger, def.properties, def.required);
+				} else {
+					console.warn('schema not found', schema.$ref);
+				}
+			} else {
+        console.warn('no schema ref found', schema.$ref);
+      }
+    };
+
 	});
