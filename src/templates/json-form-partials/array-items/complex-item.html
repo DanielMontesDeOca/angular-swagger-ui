@@ -1,0 +1,23 @@
+<span class="json-form" ng-style="{'margin-left': 20+$index+'px'}" ng-repeat="param in param.parameters">
+  <label>{{param.name}}: </label>
+  <span ng-switch="param.subtype">
+    <span ng-switch-when="object">
+      <span ng-init="arrayform=arrayform[param.id]"></span>
+      <span>{</span>
+        <div class="json-form-block" ng-include src="'templates/json-form-partials/array-items/complex-item.html'"></div>
+      <div ng-style="{'margin-left': $index+'px'}">},</div>
+    </span>
+    <span ng-switch-when="array">
+      <span ng-init="subform=arrayform[param.id]"></span>
+      <span class="json-form-block" ng-include src="'templates/json-form-partials/array.html'"></span>
+    </span>
+    <span ng-switch-when="enum">
+      <select ng-model="arrayform[param.id]">
+        <option ng-repeat="value in param.enum" value="{{value}}" ng-bind="value + (param.default === value ? ' (default)' : '')" ng-selected="param.default===value"></option>
+      </select>,
+    </span>
+    <span ng-switch-default>
+      <input ng-model="arrayform[param.id]" placeholder="{{param.subtype}} {{param.required ? '(required)' : ''}}" ng-required="param.required">,
+    </span>
+  </span>
+</span>

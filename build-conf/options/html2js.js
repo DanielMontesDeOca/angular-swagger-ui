@@ -16,7 +16,7 @@ module.exports = {
 			}
 		},
 		files: [{
-			src: ['src/templates/{,*/}*.html'],
+			src: ['src/templates/**/*.html'],
 			dest: 'dist/scripts/templates.js'
 		}]
 	}

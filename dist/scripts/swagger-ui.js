@@ -216,7 +216,8 @@ angular
 			var deferred = $q.defer(),
 				query = {},
 				headers = {},
-				path = operation.path;
+				path = operation.path,
+        body = null;
 
 			// build request parameters
 			for (var i = 0, params = operation.parameters || [], l = params.length; i < l; i++) {
@@ -248,7 +249,10 @@ angular
 						}
 						break;
 					case 'body':
-						values.body = values.body || value;
+            if(values.contentType === 'application/json') {
+              body = JSON.stringify(values.body);
+            }
+						body = body || value;
 						break;
 				}
 			}
@@ -273,7 +277,7 @@ angular
 					method: operation.httpMethod,
 					url: baseUrl + path,
 					headers: headers,
-					data: values.body,
+					data: body,
 					params: query
 				},
 				callback = function(data, status, headers, config) {
@@ -551,6 +555,64 @@ angular
 			modelCache = {};
 		};
 
+    function getSchemaRef(schema) {
+      return schema.type === 'array' ? schema.items.$ref : schema.$ref;
+    }
+
+    function getParamsFromDefinitionRef(swagger, ref) {
+      var def = swagger.definitions && swagger.definitions[getDefinitionName({$ref: ref})];
+      var param = {};
+      param.required = def.required;
+      param.type = def.type;
+      param.subtype = def.type;
+      if(def.properties) {
+        param.parameters = propertiesAsParameters(swagger, def.properties, def.required);
+      }
+      return param;
+    }
+
+    function propertiesAsParameters(swagger, properties, required) {
+      var params = [];
+      for(var name in properties) {
+        if(properties.hasOwnProperty(name)) {
+          var param = properties[name];
+          param.id = name;
+          param.name = name;
+          if(required) {
+            param.required = required.length ? required.indexOf(name) !== -1 : required;
+          }
+          param.subtype = param.enum ? 'enum' : param.type;
+          var ref = getSchemaRef(param);
+          if(ref) {
+            var parameters = getParamsFromDefinitionRef(swagger, ref);
+            if(param.subtype === 'array') {
+              param.items = parameters;
+            }
+            param.parameters = parameters.parameters;
+            param.subtype = param.subtype || parameters.subtype;
+          } else if(param.properties) {
+            param.parameters = propertiesAsParameters(swagger, param.properties, param.required);
+          }
+          params.push(param);
+        }
+      }
+      return params;
+    }
+
+    this.getBodySchemaAsParameters = function(swagger, schema) {
+      var ref = getSchemaRef(schema);
+      if (ref) {
+				var def = swagger.definitions && swagger.definitions[getDefinitionName({$ref: ref})];
+				if (def) {
+          return propertiesAsParameters(swagger, def.properties, def.required);
+				} else {
+					console.warn('schema not found', schema.$ref);
+				}
+			} else {
+        console.warn('no schema ref found', schema.$ref);
+      }
+    };
+
 	});
 /*
  * Orange angular-swagger-ui - v0.2.1
@@ -638,6 +700,31 @@ angular
 			return trusted;
 		}
 
+    /**
+     * recursively builds form object from params
+     */
+    function buildFormFromParams(params) {
+      var form = {};
+      for (var i = 0; i < params.length; i++) {
+        var p = params[i];
+        switch (p.subtype) {
+          case 'object':
+            form[p.id] = buildFormFromParams(p.parameters);
+            break;
+          case 'array':
+            form[p.id] = [];
+            break;
+          case 'enum':
+            form[p.id] = p.enum[0];
+            break;
+          default:
+            form[p.id] = null;
+            break;
+        }
+      }
+      return form;
+    }
+
 		/**
 		 * parses swagger description to ease HTML generation
 		 */
@@ -717,6 +804,10 @@ angular
 						}
 						if (param.in === 'body') {
 							operation.consumes = operation.consumes || ['application/json'];
+              if(operation.consumes[0] === 'application/json') {
+                param.parameters = swaggerModel.getBodySchemaAsParameters(swagger, param.schema);
+                form[operationId][param.name] = buildFormFromParams(param.parameters);
+              }
 						}
 						paramId++;
 					}
@@ -798,9 +889,7 @@ angular
 		 */
 		this.execute = function(contentType, data, isTrustedSources, parseResult) {
 			var deferred = $q.defer();
-			contentType = 'application/json'
-			if (
-				contentType === 'application/json') {
+			if (contentType === 'application/json') {
 				swagger = data;
 				trustedSources = isTrustedSources;
 				try {
@@ -818,9 +907,105 @@ angular
 		};
 
 	}]);
-angular.module('swaggerUiTemplates', ['templates/swagger-ui.html']);
+'use strict';
+
+function createNewItemFromSchema(schema) {
+  var newItem = {};
+  for (var i = 0; i < schema.parameters.length; i++) {
+    var p = schema.parameters[i];
+    switch (p.subtype) {
+      case 'object':
+        newItem[p.id] = createNewItemFromSchema(p);
+        break;
+      case 'array':
+        newItem[p.id] = [];
+        break;
+      case 'enum':
+        newItem[p.id] = p.enum[0];
+        break;
+      default:
+        newItem[p.id] = null;
+        break;
+    }
+  }
+  return newItem;
+}
+
+function createNewArrayItemFromSchema(schema) {
+  if(!schema.parameters) {
+    switch(schema.items.type) {
+      default:
+        return null;
+    }
+  } else {
+    return createNewItemFromSchema(schema);
+  }
+}
+
+angular
+  .module('swaggerUi')
+  .directive('swaggerJsonForm', function() {
+    // builds form from json body schema and binds to controller form object
+    return {
+      restrict: 'E',
+      scope: {
+        parameters: '=',
+        form: '='
+      },
+      templateUrl: 'templates/json-form.html',
+      link: function(scope) {
+        scope.addArrayItem = function(arraySchema, arrayForm) {
+          arrayForm[arrayForm.length] = createNewArrayItemFromSchema(arraySchema);
+        };
+        scope.removeArrayItem = function(id, arrayForm) {
+          arrayForm.splice(id, 1);
+        };
+      }
+    };
+  });
+angular.module('swaggerUiTemplates', ['templates/json-form-partials/array-items/complex-item.html', 'templates/json-form-partials/array-items/simple-item.html', 'templates/json-form-partials/array.html', 'templates/json-form-partials/enum.html', 'templates/json-form-partials/main.html', 'templates/json-form-partials/object.html', 'templates/json-form-partials/simple-type.html', 'templates/json-form.html', 'templates/swagger-ui.html']);
+
+angular.module('templates/json-form-partials/array-items/complex-item.html', []).run(['$templateCache', function($templateCache) {
+  $templateCache.put('templates/json-form-partials/array-items/complex-item.html',
+    '<span class="json-form" ng-style="{\'margin-left\': 20+$index+\'px\'}" ng-repeat="param in param.parameters"> <label>{{param.name}}: </label> <span ng-switch="param.subtype"> <span ng-switch-when="object"> <span ng-init="arrayform=arrayform[param.id]"></span> <span>{</span> <div class="json-form-block" ng-include src="\'templates/json-form-partials/array-items/complex-item.html\'"></div> <div ng-style="{\'margin-left\': $index+\'px\'}">},</div> </span> <span ng-switch-when="array"> <span ng-init="subform=arrayform[param.id]"></span> <span class="json-form-block" ng-include src="\'templates/json-form-partials/array.html\'"></span> </span> <span ng-switch-when="enum"> <select ng-model="arrayform[param.id]"> <option ng-repeat="value in param.enum" value="{{value}}" ng-bind="value + (param.default === value ? \' (default)\' : \'\')" ng-selected="param.default===value"> </select>, </span> <span ng-switch-default> <input ng-model="arrayform[param.id]" placeholder="{{param.subtype}} {{param.required ? \'(required)\' : \'\'}}" ng-required="param.required">, </span> </span> </span>');
+}]);
+
+angular.module('templates/json-form-partials/array-items/simple-item.html', []).run(['$templateCache', function($templateCache) {
+  $templateCache.put('templates/json-form-partials/array-items/simple-item.html',
+    '<input ng-model="subform[id]" ng-model-options="{allowInvalid: true}" placeholder="{{param.items.type}} {{param.required ? \'(required)\' : \'\'}}" ng-required="param.required">,');
+}]);
+
+angular.module('templates/json-form-partials/array.html', []).run(['$templateCache', function($templateCache) {
+  $templateCache.put('templates/json-form-partials/array.html',
+    '<span>[</span> <div class="json-form-array-add-item" ng-click="addArrayItem(param, subform)"></div> <div class="json-form-block" ng-repeat="(id, val) in subform track by id"> <div ng-if="subform[id] !== undefined"> <div class="json-form-array-remove-item" ng-click="removeArrayItem(id, subform)"></div> <div ng-style="{\'margin-left\': 20+$index+\'px\', \'display\': \'inline-block\'}"> <span ng-if="param.parameters"> <span ng-init="arrayform = subform[id]"></span> <div>{</div> <div class="json-form-block" ng-include src="\'templates/json-form-partials/array-items/complex-item.html\'"></div> <div>},</div> </span> <span ng-if="!param.parameters"> <span ng-include src="\'templates/json-form-partials/array-items/simple-item.html\'"></span> </span> </div> </div> </div> <span ng-style="{\'margin-left\': $index+\'px\'}">],</span>');
+}]);
+
+angular.module('templates/json-form-partials/enum.html', []).run(['$templateCache', function($templateCache) {
+  $templateCache.put('templates/json-form-partials/enum.html',
+    '<select ng-model="subform[param.id]"> <option ng-repeat="value in param.enum" value="{{value}}" ng-bind="value + (param.default === value ? \' (default)\' : \'\')" ng-selected="param.default===value"> </select>,');
+}]);
+
+angular.module('templates/json-form-partials/main.html', []).run(['$templateCache', function($templateCache) {
+  $templateCache.put('templates/json-form-partials/main.html',
+    '<div class="json-form" ng-style="{\'margin-left\': 20+$index+\'px\'}" ng-init="subform = subform"> <label>{{param.name}}: </label> <span ng-switch="param.subtype"> <span ng-switch-when="object"> <span ng-init="subform=subform[param.id]" ng-include src="\'templates/json-form-partials/object.html\'"></span> </span> <span ng-init="subform=subform[param.id]" ng-switch-when="array"> <span ng-include src="\'templates/json-form-partials/array.html\'"></span> </span> <span ng-switch-when="enum"><span ng-include src="\'templates/json-form-partials/enum.html\'"></span></span> <span ng-switch-default><span ng-include src="\'templates/json-form-partials/simple-type.html\'"></span></span> </span> </div>');
+}]);
+
+angular.module('templates/json-form-partials/object.html', []).run(['$templateCache', function($templateCache) {
+  $templateCache.put('templates/json-form-partials/object.html',
+    '<span>{</span> <div class="json-form-block" ng-style="{\'margin-left\': $index+\'px\'}"> <div ng-repeat="param in param.parameters" ng-include src="\'templates/json-form-partials/main.html\'"></div> </div> <span ng-style="{\'margin-left\': $index+\'px\'}">},</span>');
+}]);
+
+angular.module('templates/json-form-partials/simple-type.html', []).run(['$templateCache', function($templateCache) {
+  $templateCache.put('templates/json-form-partials/simple-type.html',
+    '<input ng-model="subform[param.id]" ng-model-options="{allowInvalid: true}" placeholder="{{param.items ? param.items.type : param.subtype}} {{param.required ? \'(required)\' : \'\'}}" ng-required="param.required">,');
+}]);
+
+angular.module('templates/json-form.html', []).run(['$templateCache', function($templateCache) {
+  $templateCache.put('templates/json-form.html',
+    '{ <div class="json-form-block"> <div ng-init="subform=form" ng-repeat="param in parameters" ng-include src="\'templates/json-form-partials/main.html\'"></div> </div> }');
+}]);
 
 angular.module('templates/swagger-ui.html', []).run(['$templateCache', function($templateCache) {
   $templateCache.put('templates/swagger-ui.html',
-    '<div class="swagger-ui" aria-live="polite" aria-relevant="additions removals"> <div class="api-name"> <h3 ng-bind="infos.title"></h3> </div> <div class="api-description" ng-bind-html="infos.description"></div> <div class="api-infos"> <div class="api-infos-contact" ng-if="infos.contact"> <div ng-if="infos.contact.name" class="api-infos-contact-name">created by <span ng-bind="infos.contact.name"></span></div> <div ng-if="infos.contact.url" class="api-infos-contact-url">see more at <a href="{{infos.contact.url}}" ng-bind="infos.contact.url"></a></div> <a ng-if="infos.contact.email" class="api-infos-contact-url" href="mailto:{{infos.contact.email}}?subject={{infos.title}}">contact the developer</a> </div> <div class="api-infos-license" ng-if="infos.license"> <span>license: </span><a href="{{infos.license.url}}" ng-bind="infos.license.name"></a> </div> </div> <ul class="list-unstyled endpoints"> <li ng-repeat="api in resources" class="endpoint" ng-class="{active:api.open}"> <div class="clearfix"> <ul class="list-inline pull-left endpoint-heading"> <li> <h4> <a href="javascript:;" ng-click="api.open=!api.open;permalink(api.open?api.name:null)" ng-bind="api.name"></a> <span ng-if="api.description"> : <span ng-bind="api.description"></span></span> </h4> </li> </ul> <ul class="list-inline pull-right endpoint-actions"> <li> <a href="javascript:;" ng-click="api.open=!api.open;permalink(api.open?api.name:null)">open/hide</a> </li> <li> <a href="javascript:;" ng-click="expand(api);permalink(api.name)">list operations</a> </li> <li> <a href="javascript:;" ng-click="expand(api,true);permalink(api.name+\'*\')">expand operations</a> </li> </ul> </div> <ul class="list-unstyled collapse operations" ng-class="{in:api.open}"> <li ng-repeat="op in api.operations" class="operation {{op.httpMethod}}"> <div class="heading"> <a ng-click="op.open=!op.open;permalink(op.open?op.operationId:null)" href="javascript:;"> <div class="clearfix"> <span class="http-method text-uppercase" ng-bind="op.httpMethod"></span> <span class="path" ng-bind="op.path"></span> <span class="description pull-right" ng-bind="op.summary"></span> </div> </a> </div> <div class="content collapse" ng-class="{in:op.open}"> <div ng-if="op.description"> <h5>implementation notes</h5> <p ng-bind-html="op.description"></p> </div> <form role="form" name="explorerForm" ng-submit="explorerForm.$valid&&submitExplorer(op)"> <div ng-if="op.responseClass" class="response"> <h5>response class (status {{op.responseClass.status}})</h5> <div ng-if="op.responseClass.display!==-1"> <ul class="list-inline schema"> <li><a href="javascript:;" ng-click="op.responseClass.display=0" ng-class="{active:op.responseClass.display===0}">model</a></li> <li><a href="javascript:;" ng-click="op.responseClass.display=1" ng-class="{active:op.responseClass.display===1}">model schema</a></li> </ul> <pre class="model" ng-if="op.responseClass.display===0" ng-bind-html="op.responseClass.schema.model"></pre> <pre class="model-schema" ng-if="op.responseClass.display===1" ng-bind="op.responseClass.schema.json"></pre> </div> <div ng-if="op.produces" class="content-type"> <label for="responseContentType{{op.id}}">response content type</label> <select ng-model="form[op.id].responseType" ng-options="item for item in op.produces track by item" id="responseContentType{{op.id}}" name="responseContentType{{op.id}}" required></select> </div> </div> <div ng-if="op.parameters&&op.parameters.length>0" class="table-responsive"> <h5>parameters</h5> <table class="table table-condensed parameters"> <thead> <tr> <th class="name">parameter <th class="value">value <th class="desc">description <th class="type">parameter type <th class="data">data type   <tbody> <tr ng-repeat="param in op.parameters"> <td ng-class="{bold:param.required}"> <label for="param{{param.id}}" ng-bind="param.name"></label>  <td ng-class="{bold:param.required}"> <div ng-if="apiExplorer"> <div ng-if="param.in!==\'body\'" ng-switch="param.subtype"> <input ng-switch-when="file" type="file" file-input ng-model="form[op.id][param.name]" id="param{{param.id}}" placeholder="{{param.required?\'(required)\':\'\'}}" ng-required="param.required"> <select ng-switch-when="enum" ng-model="form[op.id][param.name]" id="param{{param.id}}"> <option ng-repeat="value in param.enum" value="{{value}}" ng-bind="value+(param.default===value?\' (default)\':\'\')" ng-selected="param.default===value"> </select> <input ng-switch-default type="text" ng-model="form[op.id][param.name]" id="param{{param.id}}" placeholder="{{param.required?\'(required)\':\'\'}}" ng-required="param.required"> </div> <div ng-if="param.in===\'body\'"> <textarea id="param{{param.id}}" ng-model="form[op.id][param.name]" ng-required="param.required"></textarea> <br> <div ng-if="op.consumes" class="content-type"> <label for="bodyContentType{{op.id}}">parameter content type</label> <select ng-model="form[op.id].contentType" id="bodyContentType{{op.id}}" name="bodyContentType{{op.id}}" ng-options="item for item in op.consumes track by item"></select> </div> </div> </div> <div ng-if="!apiExplorer"> <div ng-if="param.in!==\'body\'"> <div ng-if="param.default"><span ng-bind="param.default"></span> (default)</div> <div ng-if="param.enum"> <span ng-repeat="value in param.enum">{{value}}<span ng-if="!$last"> or </span></span> </div> <div ng-if="param.required"><strong>(required)</strong></div> </div> </div>  <td ng-class="{bold:param.required}" ng-bind-html="param.description"> <td ng-bind="param.in"> <td ng-if="param.type" ng-switch="param.type"> <span ng-switch-when="array" ng-bind="\'Array[\'+param.items.type+\']\'"></span> <span ng-switch-default ng-bind="param.type"></span>  <td ng-if="param.schema"> <ul class="list-inline schema"> <li><a href="javascript:;" ng-click="param.schema.display=0" ng-class="{active:param.schema.display===0}">model</a></li> <li><a href="javascript:;" ng-click="param.schema.display=1" ng-class="{active:param.schema.display===1}">model schema</a></li> </ul> <pre class="model" ng-if="param.schema.display===0&&param.schema.model" ng-bind-html="param.schema.model"></pre> <div class="model-schema" ng-if="param.schema.display===1&&param.schema.json"> <pre ng-bind="param.schema.json" ng-click="form[op.id][param.name]=param.schema.json" aria-described-by="help-{{param.id}}"></pre> <div id="help-{{param.id}}">click to set as parameter value</div> </div>    </table> </div> <div class="table-responsive" ng-if="op.hasResponses"> <h5>response messages</h5> <table class="table responses"> <thead> <tr> <th class="code">HTTP status code <th>reason <th>response model   <tbody> <tr ng-repeat="(code, resp) in op.responses"> <td ng-bind="code"> <td ng-bind-html="resp.description"> <td> <ul ng-if="resp.schema&&resp.schema.model&&resp.schema.json" class="list-inline schema"> <li><a href="javascript:;" ng-click="resp.display=0" ng-class="{active:resp.display===0}">model</a></li> <li><a href="javascript:;" ng-click="resp.display=1" ng-class="{active:resp.display===1}">model schema</a></li> </ul> <pre class="model" ng-if="resp.display===0&&resp.schema&&resp.schema.model" ng-bind-html="resp.schema.model"></pre> <pre class="model-schema" ng-if="resp.display===1&&resp.schema&&resp.schema.json" ng-bind="resp.schema.json"></pre>    </table> </div> <div ng-if="apiExplorer"> <button class="btn btn-default" ng-click="op.explorerResult=false;op.hideExplorerResult=false" type="submit" ng-disabled="op.loading" ng-bind="op.loading?\'loading...\':\'try it out!\'"></button> <a class="hide-try-it" ng-if="op.explorerResult&&!op.hideExplorerResult" ng-click="op.hideExplorerResult=true" href="javascript:;">hide response</a> </div> </form> <div ng-if="op.explorerResult" ng-show="!op.hideExplorerResult"> <h5>request URL</h5> <pre ng-bind="op.explorerResult.url"></pre> <h5>response body</h5> <pre ng-bind="op.explorerResult.response.body"></pre> <h5>response code</h5> <pre ng-bind="op.explorerResult.response.status"></pre> <h5>response headers</h5> <pre ng-bind="op.explorerResult.response.headers"></pre> </div> </div> </li> </ul> </li> </ul> <div class="api-version" ng-if="infos"> [BASE URL: <span class="h4" ng-bind="infos.basePath"></span>, API VERSION: <span class="h4" ng-bind="infos.version"></span>, HOST: <span class="h4" ng-bind="infos.scheme"></span>://<span class="h4" ng-bind="infos.host"></span>] </div> </div>');
+    '<div class="swagger-ui" aria-live="polite" aria-relevant="additions removals"> <div class="api-name"> <h3 ng-bind="infos.title"></h3> </div> <div class="api-description" ng-bind-html="infos.description"></div> <div class="api-infos"> <div class="api-infos-contact" ng-if="infos.contact"> <div ng-if="infos.contact.name" class="api-infos-contact-name">created by <span ng-bind="infos.contact.name"></span></div> <div ng-if="infos.contact.url" class="api-infos-contact-url">see more at <a href="{{infos.contact.url}}" ng-bind="infos.contact.url"></a></div> <a ng-if="infos.contact.email" class="api-infos-contact-url" href="mailto:{{infos.contact.email}}?subject={{infos.title}}">contact the developer</a> </div> <div class="api-infos-license" ng-if="infos.license"> <span>license: </span><a href="{{infos.license.url}}" ng-bind="infos.license.name"></a> </div> </div> <ul class="list-unstyled endpoints"> <li ng-repeat="api in resources" class="endpoint" ng-class="{active:api.open}"> <div class="clearfix"> <ul class="list-inline pull-left endpoint-heading"> <li> <h4> <a href="javascript:;" ng-click="api.open=!api.open;permalink(api.open?api.name:null)" ng-bind="api.name"></a> <span ng-if="api.description"> : <span ng-bind="api.description"></span></span> </h4> </li> </ul> <ul class="list-inline pull-right endpoint-actions"> <li> <a href="javascript:;" ng-click="api.open=!api.open;permalink(api.open?api.name:null)">open/hide</a> </li> <li> <a href="javascript:;" ng-click="expand(api);permalink(api.name)">list operations</a> </li> <li> <a href="javascript:;" ng-click="expand(api,true);permalink(api.name+\'*\')">expand operations</a> </li> </ul> </div> <ul class="list-unstyled collapse operations" ng-class="{in:api.open}"> <li ng-repeat="op in api.operations" class="operation {{op.httpMethod}}"> <div class="heading"> <a ng-click="op.open=!op.open;permalink(op.open?op.operationId:null)" href="javascript:;"> <div class="clearfix"> <span class="http-method text-uppercase" ng-bind="op.httpMethod"></span> <span class="path" ng-bind="op.path"></span> <span class="description pull-right" ng-bind="op.summary"></span> </div> </a> </div> <div class="content collapse" ng-class="{in:op.open}"> <div ng-if="op.description"> <h5>implementation notes</h5> <p ng-bind-html="op.description"></p> </div> <form role="form" name="explorerForm" ng-submit="explorerForm.$valid&&submitExplorer(op)"> <div ng-if="op.responseClass" class="response"> <h5>response class (status {{op.responseClass.status}})</h5> <div ng-if="op.responseClass.display!==-1"> <ul class="list-inline schema"> <li><a href="javascript:;" ng-click="op.responseClass.display=0" ng-class="{active:op.responseClass.display===0}">model</a></li> <li><a href="javascript:;" ng-click="op.responseClass.display=1" ng-class="{active:op.responseClass.display===1}">model schema</a></li> </ul> <pre class="model" ng-if="op.responseClass.display===0" ng-bind-html="op.responseClass.schema.model"></pre> <pre class="model-schema" ng-if="op.responseClass.display===1" ng-bind="op.responseClass.schema.json"></pre> </div> <div ng-if="op.produces" class="content-type"> <label for="responseContentType{{op.id}}">response content type</label> <select ng-model="form[op.id].responseType" ng-options="item for item in op.produces track by item" id="responseContentType{{op.id}}" name="responseContentType{{op.id}}" required></select> </div> </div> <div ng-if="op.parameters&&op.parameters.length>0" class="table-responsive"> <h5>parameters</h5> <table class="table table-condensed parameters"> <thead> <tr> <th class="name">parameter <th class="value">value <th class="desc">description <th class="type">parameter type <th class="data">data type   <tbody> <tr ng-repeat="param in op.parameters"> <td ng-class="{bold:param.required}"> <label for="param{{param.id}}" ng-bind="param.name"></label>  <td ng-class="{bold:param.required}"> <div ng-if="apiExplorer"> <div ng-if="param.in!==\'body\'" ng-switch="param.subtype"> <input ng-switch-when="file" type="file" file-input ng-model="form[op.id][param.name]" id="param{{param.id}}" placeholder="{{param.required?\'(required)\':\'\'}}" ng-required="param.required"> <select ng-switch-when="enum" ng-model="form[op.id][param.name]" id="param{{param.id}}"> <option ng-repeat="value in param.enum" value="{{value}}" ng-bind="value+(param.default===value?\' (default)\':\'\')" ng-selected="param.default===value"> </select> <input ng-switch-default type="text" ng-model="form[op.id][param.name]" id="param{{param.id}}" placeholder="{{param.required?\'(required)\':\'\'}}" ng-required="param.required"> </div> <div ng-if="param.in===\'body\'"> <textarea ng-if="!param.parameters" id="param{{param.id}}" ng-model="form[op.id][param.name]" ng-required="param.required"></textarea> <div ng-if="param.parameters"> <swagger-json-form parameters="param.parameters" form="form[op.id][\'body\']"></swagger-json-form> </div> <br> <div ng-if="op.consumes" class="content-type"> <label for="bodyContentType{{op.id}}">parameter content type</label> <select ng-model="form[op.id].contentType" id="bodyContentType{{op.id}}" name="bodyContentType{{op.id}}" ng-options="item for item in op.consumes track by item"></select> </div> </div> </div> <div ng-if="!apiExplorer"> <div ng-if="param.in!==\'body\'"> <div ng-if="param.default"><span ng-bind="param.default"></span> (default)</div> <div ng-if="param.enum"> <span ng-repeat="value in param.enum">{{value}}<span ng-if="!$last"> or </span></span> </div> <div ng-if="param.required"><strong>(required)</strong></div> </div> </div>  <td ng-class="{bold:param.required}" ng-bind-html="param.description"> <td ng-bind="param.in"> <td ng-if="param.type" ng-switch="param.type"> <span ng-switch-when="array" ng-bind="\'Array[\'+param.items.type+\']\'"></span> <span ng-switch-default ng-bind="param.type"></span>  <td ng-if="param.schema"> <ul class="list-inline schema"> <li><a href="javascript:;" ng-click="param.schema.display=0" ng-class="{active:param.schema.display===0}">model</a></li> <li><a href="javascript:;" ng-click="param.schema.display=1" ng-class="{active:param.schema.display===1}">model schema</a></li> </ul> <pre class="model" ng-if="param.schema.display===0&&param.schema.model" ng-bind-html="param.schema.model"></pre> <div class="model-schema" ng-if="param.schema.display===1&&param.schema.json"> <pre ng-bind="param.schema.json" ng-click="form[op.id][param.name]=param.schema.json" aria-described-by="help-{{param.id}}"></pre> <div id="help-{{param.id}}">click to set as parameter value</div> </div>    </table> </div> <div class="table-responsive" ng-if="op.hasResponses"> <h5>response messages</h5> <table class="table responses"> <thead> <tr> <th class="code">HTTP status code <th>reason <th>response model   <tbody> <tr ng-repeat="(code, resp) in op.responses"> <td ng-bind="code"> <td ng-bind-html="resp.description"> <td> <ul ng-if="resp.schema&&resp.schema.model&&resp.schema.json" class="list-inline schema"> <li><a href="javascript:;" ng-click="resp.display=0" ng-class="{active:resp.display===0}">model</a></li> <li><a href="javascript:;" ng-click="resp.display=1" ng-class="{active:resp.display===1}">model schema</a></li> </ul> <pre class="model" ng-if="resp.display===0&&resp.schema&&resp.schema.model" ng-bind-html="resp.schema.model"></pre> <pre class="model-schema" ng-if="resp.display===1&&resp.schema&&resp.schema.json" ng-bind="resp.schema.json"></pre>    </table> </div> <div ng-if="apiExplorer"> <button class="btn btn-default" ng-click="op.explorerResult=false;op.hideExplorerResult=false" type="submit" ng-disabled="op.loading" ng-bind="op.loading?\'loading...\':\'try it out!\'"></button> <a class="hide-try-it" ng-if="op.explorerResult&&!op.hideExplorerResult" ng-click="op.hideExplorerResult=true" href="javascript:;">hide response</a> </div> </form> <div ng-if="op.explorerResult" ng-show="!op.hideExplorerResult"> <h5>request URL</h5> <pre ng-bind="op.explorerResult.url"></pre> <h5>response body</h5> <pre ng-bind="op.explorerResult.response.body"></pre> <h5>response code</h5> <pre ng-bind="op.explorerResult.response.status"></pre> <h5>response headers</h5> <pre ng-bind="op.explorerResult.response.headers"></pre> </div> </div> </li> </ul> </li> </ul> <div class="api-version" ng-if="infos"> [BASE URL: <span class="h4" ng-bind="infos.basePath"></span>, API VERSION: <span class="h4" ng-bind="infos.version"></span>, HOST: <span class="h4" ng-bind="infos.scheme"></span>://<span class="h4" ng-bind="infos.host"></span>] </div> </div>');
 }]);

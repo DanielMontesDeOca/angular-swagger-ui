@@ -1,0 +1,15 @@
+<div class="json-form" ng-style="{'margin-left': 20+$index+'px'}" ng-init="subform = subform">
+
+  <label>{{param.name}}: </label>
+  <span ng-switch="param.subtype">
+    <span ng-switch-when="object">
+      <span ng-init="subform=subform[param.id]" ng-include src="'templates/json-form-partials/object.html'"></span>
+    </span>
+    <span ng-init="subform=subform[param.id]" ng-switch-when="array">
+      <span ng-include src="'templates/json-form-partials/array.html'"></span>
+    </span>
+    <span ng-switch-when="enum"><span ng-include src="'templates/json-form-partials/enum.html'"></span></span>
+    <span ng-switch-default><span ng-include src="'templates/json-form-partials/simple-type.html'"></span></span>
+  </span>
+
+</div>

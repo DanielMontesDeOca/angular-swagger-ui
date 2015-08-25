@@ -21,7 +21,8 @@ module.exports = {
 				'dist/scripts/swagger-modules.js',
 				'dist/scripts/modules/swagger-json-parser.js',
 				'dist/scripts/modules/swagger-external-references.js',
-				'dist/scripts/modules/swagger-xml-formatter.js'
+				'dist/scripts/modules/swagger-xml-formatter.js',
+        'dist/scripts/swagger-json-form.js'
 			]
 		}]
 	}

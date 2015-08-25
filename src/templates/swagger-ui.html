@@ -95,8 +95,11 @@
 			                							<input ng-switch-default type="text" ng-model="form[op.id][param.name]" id="param{{param.id}}" placeholder="{{param.required?'(required)':''}}" ng-required="param.required">
 			                						</div>
 			                						<div ng-if="param.in==='body'">
-			                							<textarea id="param{{param.id}}" ng-model="form[op.id][param.name]" ng-required="param.required"></textarea>
-			                							<br>
+                                    <textarea ng-if="!param.parameters" id="param{{param.id}}" ng-model="form[op.id][param.name]" ng-required="param.required"></textarea>
+                                    <div ng-if="param.parameters">
+                                      <swagger-json-form parameters="param.parameters" form="form[op.id]['body']"></swagger-json-form>
+                                    </div>
+                                    <br>
 			                							<div ng-if="op.consumes" class="content-type">
 								                			<label for="bodyContentType{{op.id}}">parameter content type</label>
 								                			<select ng-model="form[op.id].contentType" id="bodyContentType{{op.id}}" name="bodyContentType{{op.id}}" ng-options="item for item in op.consumes track by item"></select>
