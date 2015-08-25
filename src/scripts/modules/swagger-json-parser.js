@@ -22,6 +22,31 @@ angular
 			return trusted;
 		}
 
+    /**
+     * recursively builds form object from params
+     */
+    function buildFormFromParams(params) {
+      var form = {};
+      for (var i = 0; i < params.length; i++) {
+        var p = params[i];
+        switch (p.subtype) {
+          case 'object':
+            form[p.id] = buildFormFromParams(p.parameters);
+            break;
+          case 'array':
+            form[p.id] = [];
+            break;
+          case 'enum':
+            form[p.id] = p.enum[0];
+            break;
+          default:
+            form[p.id] = null;
+            break;
+        }
+      }
+      return form;
+    }
+
 		/**
 		 * parses swagger description to ease HTML generation
 		 */
@@ -101,6 +126,10 @@ angular
 						}
 						if (param.in === 'body') {
 							operation.consumes = operation.consumes || ['application/json'];
+              if(operation.consumes[0] === 'application/json') {
+                param.parameters = swaggerModel.getBodySchemaAsParameters(swagger, param.schema);
+                form[operationId][param.name] = buildFormFromParams(param.parameters);
+              }
 						}
 						paramId++;
 					}
