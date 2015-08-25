@@ -967,37 +967,37 @@ angular.module('swaggerUiTemplates', ['templates/json-form-partials/array-items/
 
 angular.module('templates/json-form-partials/array-items/complex-item.html', []).run(['$templateCache', function($templateCache) {
   $templateCache.put('templates/json-form-partials/array-items/complex-item.html',
-    '<span class="json-form" ng-style="{\'margin-left\': 20+$index+\'px\'}" ng-repeat="param in param.parameters"> <label>{{param.name}}: </label> <span ng-switch="param.subtype"> <span ng-switch-when="object"> <span ng-init="arrayform=arrayform[param.id]"></span> <span>{</span> <div class="json-form-block" ng-include src="\'templates/json-form-partials/array-items/complex-item.html\'"></div> <div ng-style="{\'margin-left\': $index+\'px\'}">},</div> </span> <span ng-switch-when="array"> <span ng-init="subform=arrayform[param.id]"></span> <span class="json-form-block" ng-include src="\'templates/json-form-partials/array.html\'"></span> </span> <span ng-switch-when="enum"> <select ng-model="arrayform[param.id]"> <option ng-repeat="value in param.enum" value="{{value}}" ng-bind="value + (param.default === value ? \' (default)\' : \'\')" ng-selected="param.default===value"> </select>, </span> <span ng-switch-default> <input ng-model="arrayform[param.id]" placeholder="{{param.subtype}} {{param.required ? \'(required)\' : \'\'}}" ng-required="param.required">, </span> </span> </span>');
+    '<span class="json-form" ng-style="{\'margin-left\': 20+$index+\'px\'}" ng-repeat="param in param.parameters"> <label>{{param.name}}: </label> <span ng-switch="param.subtype"> <span ng-switch-when="object"> <span ng-init="arrayform=arrayform[param.id]"></span> <span>{</span> <div class="json-form-block" ng-include src="\'templates/json-form-partials/array-items/complex-item.html\'"></div> <div ng-style="{\'margin-left\': $index+\'px\'}">}</div> </span> <span ng-switch-when="array"> <span ng-init="subform=arrayform[param.id]"></span> <span class="json-form-block" ng-include src="\'templates/json-form-partials/array.html\'"></span> </span> <span ng-switch-when="enum"> <select ng-model="arrayform[param.id]"> <option ng-repeat="value in param.enum" value="{{value}}" ng-bind="value + (param.default === value ? \' (default)\' : \'\')" ng-selected="param.default===value"> </select> </span> <span ng-switch-default> <input ng-model="arrayform[param.id]" placeholder="{{param.subtype}} {{param.required ? \'(required)\' : \'\'}}" ng-required="param.required"> </span> </span> </span>');
 }]);
 
 angular.module('templates/json-form-partials/array-items/simple-item.html', []).run(['$templateCache', function($templateCache) {
   $templateCache.put('templates/json-form-partials/array-items/simple-item.html',
-    '<input ng-model="subform[id]" ng-model-options="{allowInvalid: true}" placeholder="{{param.items.type}} {{param.required ? \'(required)\' : \'\'}}" ng-required="param.required">,');
+    '<input ng-model="subform[id]" ng-model-options="{allowInvalid: true}" placeholder="{{param.items.type}} {{param.required ? \'(required)\' : \'\'}}" ng-required="param.required">');
 }]);
 
 angular.module('templates/json-form-partials/array.html', []).run(['$templateCache', function($templateCache) {
   $templateCache.put('templates/json-form-partials/array.html',
-    '<span>[</span> <div class="json-form-array-add-item" ng-click="addArrayItem(param, subform)"></div> <div class="json-form-block" ng-repeat="(id, val) in subform track by id"> <div ng-if="subform[id] !== undefined"> <div class="json-form-array-remove-item" ng-click="removeArrayItem(id, subform)"></div> <div ng-style="{\'margin-left\': 20+$index+\'px\', \'display\': \'inline-block\'}"> <span ng-if="param.parameters"> <span ng-init="arrayform = subform[id]"></span> <div>{</div> <div class="json-form-block" ng-include src="\'templates/json-form-partials/array-items/complex-item.html\'"></div> <div>},</div> </span> <span ng-if="!param.parameters"> <span ng-include src="\'templates/json-form-partials/array-items/simple-item.html\'"></span> </span> </div> </div> </div> <span ng-style="{\'margin-left\': $index+\'px\'}">],</span>');
+    '<span>[</span> <div class="json-form-array-add-item" ng-click="addArrayItem(param, subform)"></div> <div class="json-form-block" ng-repeat="(id, val) in subform track by id"> <div ng-if="subform[id] !== undefined"> <div class="json-form-array-remove-item" ng-click="removeArrayItem(id, subform)"></div> <div ng-style="{\'margin-left\': 20+$index+\'px\', \'display\': \'inline-block\'}"> <span ng-if="param.parameters"> <span ng-init="arrayform = subform[id]"></span> <div>{</div> <div class="json-form-block" ng-include src="\'templates/json-form-partials/array-items/complex-item.html\'"></div> <div>}</div> </span> <span ng-if="!param.parameters"> <span ng-include src="\'templates/json-form-partials/array-items/simple-item.html\'"></span> </span> </div> </div> </div> <span ng-style="{\'margin-left\': $index+\'px\'}">]</span>');
 }]);
 
 angular.module('templates/json-form-partials/enum.html', []).run(['$templateCache', function($templateCache) {
   $templateCache.put('templates/json-form-partials/enum.html',
-    '<select ng-model="subform[param.id]"> <option ng-repeat="value in param.enum" value="{{value}}" ng-bind="value + (param.default === value ? \' (default)\' : \'\')" ng-selected="param.default===value"> </select>,');
+    '<select ng-model="subform[param.id]"> <option ng-repeat="value in param.enum" value="{{value}}" ng-bind="value + (param.default === value ? \' (default)\' : \'\')" ng-selected="param.default===value"> </select>');
 }]);
 
 angular.module('templates/json-form-partials/main.html', []).run(['$templateCache', function($templateCache) {
   $templateCache.put('templates/json-form-partials/main.html',
-    '<div class="json-form" ng-style="{\'margin-left\': 20+$index+\'px\'}" ng-init="subform = subform"> <label>{{param.name}}: </label> <span ng-switch="param.subtype"> <span ng-switch-when="object"> <span ng-init="subform=subform[param.id]" ng-include src="\'templates/json-form-partials/object.html\'"></span> </span> <span ng-init="subform=subform[param.id]" ng-switch-when="array"> <span ng-include src="\'templates/json-form-partials/array.html\'"></span> </span> <span ng-switch-when="enum"><span ng-include src="\'templates/json-form-partials/enum.html\'"></span></span> <span ng-switch-default><span ng-include src="\'templates/json-form-partials/simple-type.html\'"></span></span> </span> </div>');
+    '<div class="json-form" ng-style="{\'margin-left\': 20+$index+\'px\'}" ng-init="subform = subform"> <label>{{param.name}}: </label> <span ng-switch="param.subtype"> <span ng-switch-when="object"> <span ng-init="subform=subform[param.id]" ng-include src="\'templates/json-form-partials/object.html\'"></span> </span> <span ng-init="subform=subform[param.id]" ng-switch-when="array"> <span ng-include src="\'templates/json-form-partials/array.html\'"></span> </span> <span ng-switch-when="enum"><span ng-include src="\'templates/json-form-partials/enum.html\'"></span></span> <span ng-switch-default><div ng-include src="\'templates/json-form-partials/simple-type.html\'"></div></span> </span> </div>');
 }]);
 
 angular.module('templates/json-form-partials/object.html', []).run(['$templateCache', function($templateCache) {
   $templateCache.put('templates/json-form-partials/object.html',
-    '<span>{</span> <div class="json-form-block" ng-style="{\'margin-left\': $index+\'px\'}"> <div ng-repeat="param in param.parameters" ng-include src="\'templates/json-form-partials/main.html\'"></div> </div> <span ng-style="{\'margin-left\': $index+\'px\'}">},</span>');
+    '<span>{</span> <div class="json-form-block" ng-style="{\'margin-left\': $index+\'px\'}"> <div ng-repeat="param in param.parameters" ng-include src="\'templates/json-form-partials/main.html\'"></div> </div> <span ng-style="{\'margin-left\': $index+\'px\'}">}</span>');
 }]);
 
 angular.module('templates/json-form-partials/simple-type.html', []).run(['$templateCache', function($templateCache) {
   $templateCache.put('templates/json-form-partials/simple-type.html',
-    '<input ng-model="subform[param.id]" ng-model-options="{allowInvalid: true}" placeholder="{{param.items ? param.items.type : param.subtype}} {{param.required ? \'(required)\' : \'\'}}" ng-required="param.required">,');
+    '<input ng-model="subform[param.id]" ng-model-options="{allowInvalid: true}" placeholder="{{param.items ? param.items.type : param.subtype}} {{param.required ? \'(required)\' : \'\'}}" ng-required="param.required">');
 }]);
 
 angular.module('templates/json-form.html', []).run(['$templateCache', function($templateCache) {

@@ -10,7 +10,7 @@
         <span ng-init="arrayform = subform[id]"></span>
         <div>{</div>
         <div class="json-form-block" ng-include src="'templates/json-form-partials/array-items/complex-item.html'"></div>
-        <div>},</div>
+        <div>}</div>
       </span>
       <span ng-if="!param.parameters">
         <span ng-include src="'templates/json-form-partials/array-items/simple-item.html'"></span>
@@ -19,4 +19,4 @@
   </div>
 </div>
 
-<span ng-style="{'margin-left': $index+'px'}">],</div>
+<span ng-style="{'margin-left': $index+'px'}">]</div>
