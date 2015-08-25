@@ -46,7 +46,8 @@ angular
 			var deferred = $q.defer(),
 				query = {},
 				headers = {},
-				path = operation.path;
+				path = operation.path,
+        body = null;
 
 			// build request parameters
 			for (var i = 0, params = operation.parameters || [], l = params.length; i < l; i++) {
@@ -78,7 +79,10 @@ angular
 						}
 						break;
 					case 'body':
-						values.body = values.body || value;
+            if(values.contentType === 'application/json') {
+              body = JSON.stringify(values.body);
+            }
+						body = body || value;
 						break;
 				}
 			}
@@ -103,7 +107,7 @@ angular
 					method: operation.httpMethod,
 					url: baseUrl + path,
 					headers: headers,
-					data: values.body,
+					data: body,
 					params: query
 				},
 				callback = function(data, status, headers, config) {
